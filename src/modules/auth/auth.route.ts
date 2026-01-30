@@ -3,6 +3,7 @@ import { AuthController } from "./auth.controller";
 import { validateRequest } from "../../middleware/validateRequest";
 import { AuthSchema } from "./auth.schema";
 import { authenticate } from "../../middleware/auth.middleware";
+import { validateSession } from "../../middleware/authGuard";
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.post("/request-reset-password", AuthController.requestPasswordReset);
 router.post("/reset-password", AuthController.resetPassword);
 
 router.use(authenticate);
+router.use(validateSession);
 
 router.get("/sessions", AuthController.getSessions);
 

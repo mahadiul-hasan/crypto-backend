@@ -5,12 +5,14 @@ import { authenticate } from "../../middleware/auth.middleware";
 import { authorize } from "../../middleware/role.middleware";
 import { Role } from "../../generated/prisma/enums";
 import { BatchController } from "./batch.controller";
+import { validateSession } from "../../middleware/authGuard";
 
 const router = Router();
 
 router.get("/public", BatchController.listPublicBatches);
 
 router.use(authenticate);
+router.use(validateSession);
 
 router.get("/my", BatchController.getMyBatches);
 

@@ -3,8 +3,9 @@ import app from "./app";
 import { env } from "./configs/env";
 import { scheduleStatusUpdate } from "./automation/statusAutomation.job";
 import { scheduleClassReminders } from "./automation/sendClassReminder.job";
+import logger from "./utils/logger";
 
-const PORT = env.PORT || 5000;
+const PORT = env.PORT ?? 5000;
 
 const startServer = async () => {
   try {
@@ -12,10 +13,10 @@ const startServer = async () => {
     await scheduleClassReminders();
 
     app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
+      logger.info(`🚀 Server running on port ${PORT}`);
     });
   } catch (error) {
-    console.error("Failed to start server", error);
+    logger.error("Failed to start server", error);
     process.exit(1);
   }
 };

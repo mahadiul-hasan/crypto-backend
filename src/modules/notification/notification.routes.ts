@@ -4,10 +4,12 @@ import { authenticate } from "../../middleware/auth.middleware";
 import { NotificationController } from "./notification.controller";
 import { authorize } from "../../middleware/role.middleware";
 import { Role } from "../../generated/prisma/enums";
+import { validateSession } from "../../middleware/authGuard";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(validateSession);
 
 router.use(authorize(Role.SUPER_ADMIN, Role.ADMIN));
 

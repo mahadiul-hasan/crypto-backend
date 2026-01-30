@@ -61,28 +61,6 @@ export async function saveSession(
   await pipe.exec();
 }
 
-/* ---------------- REMOVE OLDEST ---------------- */
-
-async function removeOldest(userId: string, hashes: string[]) {
-  let oldest: { hash: string; time: number } | null = null;
-
-  for (const h of hashes) {
-    const raw = await redisConnection.get(refreshKey(h));
-
-    if (!raw) continue;
-
-    const s: SessionData = JSON.parse(raw);
-
-    if (!oldest || s.createdAt < oldest.time) {
-      oldest = { hash: h, time: s.createdAt };
-    }
-  }
-
-  if (oldest) {
-    await deleteByHash(userId, oldest.hash);
-  }
-}
-
 /* ---------------- DELETE ONE ---------------- */
 
 async function deleteByHash(userId: string, hash: string) {
@@ -142,20 +120,46 @@ export async function logoutOthers(userId: string, deviceId: string) {
   }
 }
 
-/* ---------------- LIST SESSIONS ---------------- */
-
+/* ---------------- OPTIMIZED LIST SESSIONS ---------------- */
 export async function listSessions(userId: string) {
   const hashes = await redisConnection.smembers(userKey(userId));
+  if (hashes.length === 0) return [];
 
-  const out: SessionData[] = [];
+  // Fetch all sessions in one network round-trip
+  const keys = hashes.map((h) => refreshKey(h));
+  const results = await redisConnection.mget(...keys);
 
-  for (const h of hashes) {
-    const raw = await redisConnection.get(refreshKey(h));
+  // Filter out nulls (expired sessions) and parse
+  return results
+    .filter((raw): raw is string => raw !== null)
+    .map((raw) => JSON.parse(raw) as SessionData);
+}
 
-    if (raw) {
-      out.push(JSON.parse(raw));
+/* ---------------- OPTIMIZED REMOVE OLDEST ---------------- */
+async function removeOldest(userId: string, hashes: string[]) {
+  // Guard against empty arrays (mget can fail if passed no keys)
+  if (hashes.length === 0) return;
+
+  const keys = hashes.map((h) => refreshKey(h));
+  const results = await redisConnection.mget(...keys);
+
+  // Explicitly type the variable
+  let oldest: { hash: string; time: number } | null = null;
+
+  // Using a standard loop is much better for TypeScript's type tracking
+  for (let i = 0; i < results.length; i++) {
+    const raw = results[i];
+    if (!raw) continue;
+
+    const s: SessionData = JSON.parse(raw);
+
+    if (!oldest || s.createdAt < oldest.time) {
+      oldest = { hash: hashes[i], time: s.createdAt };
     }
   }
 
-  return out;
+  // TypeScript now correctly identifies 'oldest' as { hash: string; time: number }
+  if (oldest) {
+    await deleteByHash(userId, oldest.hash);
+  }
 }

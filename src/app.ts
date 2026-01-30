@@ -1,18 +1,25 @@
 import express, { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import morgan from "morgan";
+import cookieParser from "cookie-parser"; // Added: Required for csurf
+import csurf from "csurf";
 import globalErrorHandler from "./middleware/globalErrorHandler";
 import { securityMiddleware } from "./middleware/security";
-import { requestLogger } from "./utils/logger";
-import { createRateLimiter } from "./middleware/security";
-import logger from "./utils/logger";
+import logger, { requestLogger } from "./utils/logger";
 import { LogManager } from "./utils/logManager";
 import router from "./modules/route";
-import csurf from "csurf";
 
 const app = express();
 
-// Core middlewares
+// 1. Trust Proxy (Must be first for rate-limiting & IP logs)
+app.set("trust proxy", 1);
+
+// 2. Parsers
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(cookieParser()); // Must come before csurf
+
+// 3. CORS
 app.use(
   cors({
     origin: process.env.FRONTEND_URL
@@ -23,40 +30,23 @@ app.use(
   }),
 );
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-
-// Security middlewares
+// 4. Security (Includes Helmet, Compression, and Rate Limiting)
 app.use(securityMiddleware);
+
+// 5. CSRF Protection (Note: csurf is technically deprecated, consider csrf-csrf in the future)
 app.use(csurf({ cookie: true }));
 
-// Rate limiting for all routes (general)
-app.use(
-  createRateLimiter({
-    windowMs: 15 * 60 * 1000,
-    max: 500,
-    message: "Too many requests from this IP, please try again later.",
-  }),
-);
-
-// HTTP logging
+// 6. Logging
 app.use(requestLogger);
-
-// Morgan for HTTP logging (optional, can use our custom logger instead)
 app.use(
   morgan("combined", {
-    stream: {
-      write: (message: string) => {
-        logger.http(message.trim());
-      },
-    },
+    stream: { write: (message) => logger.http(message.trim()) },
   }),
 );
 
-// Routes
+// 7. Routes
 app.use("/api", router);
 
-// Health check
 app.get("/health", (_, res) => {
   res.json({
     status: "ok",
@@ -65,16 +55,7 @@ app.get("/health", (_, res) => {
   });
 });
 
-// Clean old logs on startup and schedule daily cleanup
-LogManager.cleanupOldLogs(7);
-setInterval(
-  () => {
-    LogManager.cleanupOldLogs(7);
-  },
-  24 * 60 * 60 * 1000,
-); // Run daily
-
-// Global error handler (should be after all routes)
+// 8. Error Handling
 app.use(globalErrorHandler);
 
 // 404 handler
@@ -85,16 +66,8 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-// Global error fallback (last)
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  logger.error("Unhandled error:", err);
-  res.status(500).json({
-    message: "Internal Server Error",
-    ...(process.env.NODE_ENV === "development" && {
-      error: err.message,
-      stack: err.stack,
-    }),
-  });
-});
+// Cleanup Logic
+LogManager.cleanupOldLogs(7);
+setInterval(() => LogManager.cleanupOldLogs(7), 24 * 60 * 60 * 1000);
 
 export default app;

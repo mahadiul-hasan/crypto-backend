@@ -5,10 +5,12 @@ import { authorize } from "../../middleware/role.middleware";
 import { Role } from "../../generated/prisma/enums";
 import { TagSchema } from "./tag.schema";
 import { TagController } from "./tag.controller";
+import { validateSession } from "../../middleware/authGuard";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(validateSession);
 router.use(authorize(Role.SUPER_ADMIN, Role.ADMIN));
 
 // List all tags with pagination

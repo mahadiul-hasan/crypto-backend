@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { statusUpdateQueue } from "./statusAutomation.job";
 import { prisma } from "../configs/prisma";
 import { redisConnection } from "../configs/redis";
+import logger from "../utils/logger";
 
 const worker = new Worker(
   statusUpdateQueue.name,
@@ -90,10 +91,10 @@ const worker = new Worker(
 );
 
 worker.on("completed", () =>
-  console.log("Batch & Course status automation completed"),
+  logger.info("Batch & Course status automation completed"),
 );
 worker.on("failed", (job, err) =>
-  console.error("Status automation job failed", err),
+  logger.error("Status automation job failed", err),
 );
 
 export default worker;

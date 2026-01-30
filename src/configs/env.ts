@@ -1,6 +1,6 @@
 export const env = {
   NODE_ENV: process.env.NODE_ENV,
-  PORT: process.env.PORT ? parseInt(process.env.PORT) : 3000,
+  PORT: process.env.PORT ? parseInt(process.env.PORT) : 5000,
   ADMIN_EMAIL: process.env.ADMIN_EMAIL,
   SMTP_USER: process.env.SMTP_USER,
   SMTP_PASS: process.env.SMTP_PASS,

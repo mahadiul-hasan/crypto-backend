@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { classReminderQueue } from "./sendClassReminder.job";
 import { prisma } from "../configs/prisma";
 import { redisConnection } from "../configs/redis";
+import logger from "../utils/logger";
 
 const worker = new Worker(
   classReminderQueue.name,
@@ -53,7 +54,7 @@ const worker = new Worker(
   { connection: redisConnection },
 );
 
-worker.on("completed", () => console.log("Class reminder job completed"));
+worker.on("completed", () => logger.info("Class reminder job completed"));
 worker.on("failed", (job, err) =>
   console.error("Class reminder job failed", err),
 );

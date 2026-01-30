@@ -1,7 +1,7 @@
 import { Worker } from "bullmq";
-import { EMAIL_QUEUE_NAME, EmailJobData } from "./email.queue.js";
-import { redisConnection } from "../configs/redis.js";
-import { sendEmail } from "../utils/mailer.js";
+import { EMAIL_QUEUE_NAME, EmailJobData } from "./email.queue";
+import { redisConnection } from "../configs/redis";
+import { sendEmail } from "../utils/mailer";
 
 export const emailWorker = new Worker<EmailJobData>(
   EMAIL_QUEUE_NAME,

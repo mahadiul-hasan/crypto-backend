@@ -5,6 +5,7 @@ import { authorize } from "../../middleware/role.middleware";
 import { Role } from "../../generated/prisma/enums";
 import { AdminCourseSchema } from "./course.schema";
 import { CourseController } from "./course.controller";
+import { validateSession } from "../../middleware/authGuard";
 
 const router = Router();
 
@@ -12,6 +13,7 @@ router.get("/", CourseController.listCourses);
 router.get("/:id", CourseController.getCourse);
 
 router.use(authenticate);
+router.use(validateSession);
 router.use(authorize(Role.SUPER_ADMIN, Role.ADMIN));
 
 router.post(

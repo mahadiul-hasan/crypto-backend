@@ -5,10 +5,12 @@ import { authorize } from "../../middleware/role.middleware";
 import { PaymentController } from "./payment.controller";
 import { PaymentSchema } from "./payment.schema";
 import { Role } from "../../generated/prisma/enums";
+import { validateSession } from "../../middleware/authGuard";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(validateSession);
 
 router.post(
   "/",

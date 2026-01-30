@@ -5,10 +5,12 @@ import { ClassSchema } from "./class.schema";
 import { ClassController } from "./class.controller";
 import { authorize } from "../../middleware/role.middleware";
 import { Role } from "../../generated/prisma/enums";
+import { validateSession } from "../../middleware/authGuard";
 
 const router = Router();
 
 router.use(authenticate);
+router.use(validateSession);
 
 router.get("/my", ClassController.getMyClasses);
 

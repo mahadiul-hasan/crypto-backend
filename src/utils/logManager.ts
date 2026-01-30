@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import logger from "./logger";
 
 export interface LogEntry {
   timestamp: string;
@@ -75,7 +76,7 @@ export class LogManager {
         if (fileDate && fileDate < cutoffDate) {
           const filePath = path.join(this.logDir, file);
           fs.unlinkSync(filePath);
-          console.log(`Deleted old log file: ${file}`);
+          logger.info(`Deleted old log file: ${file}`);
         }
       }
     });
