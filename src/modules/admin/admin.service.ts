@@ -1,5 +1,10 @@
 import { prisma } from "../../configs/prisma";
 import { invalidateAllSessions } from "../../services/session.service";
+import {
+  cacheGetOrSet,
+  cacheInvalidate,
+  makeCacheKey,
+} from "../../utils/cache";
 
 type ListUsersParams = {
   page: number;
@@ -7,31 +12,39 @@ type ListUsersParams = {
   search?: string;
 };
 
-const listUsers = async ({ page, pageSize, search }: ListUsersParams) => {
-  const where: any = {};
+const listUsers = async (params: ListUsersParams) => {
+  const key = makeCacheKey(
+    "users:list",
+    `${params.page}:${params.pageSize}:${params.search ?? ""}`,
+  );
 
-  if (search) {
-    where.OR = [
-      { email: { contains: search, mode: "insensitive" } },
-      { name: { contains: search, mode: "insensitive" } },
-    ];
-  }
+  return cacheGetOrSet(key, async () => {
+    const where: any = {};
 
-  const [users, total] = await Promise.all([
-    prisma.user.findMany({
-      where,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.user.count({ where }),
-  ]);
+    if (params.search) {
+      where.OR = [
+        { email: { contains: params.search, mode: "insensitive" } },
+        { name: { contains: params.search, mode: "insensitive" } },
+      ];
+    }
 
-  return { data: users, total, page, pageSize };
+    const [users, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        skip: (params.page - 1) * params.pageSize,
+        take: params.pageSize,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    return { data: users, total, page: params.page, pageSize: params.pageSize };
+  });
 };
 
 const deleteUser = async (userId: string) => {
   await prisma.user.delete({ where: { id: userId } });
+  await cacheInvalidate([`users:list*`, `user:detail:${userId}`]);
 };
 
 const getAdminAnalytics = async () => {

@@ -13,6 +13,7 @@ const createCourse = z.object({
     description: z.string().min(20), // sanitized HTML expected
     descriptionType: z.enum(["html"]).optional(),
     price: z.number().int().nonnegative(),
+    thumbnail: z.string(),
     isActive: z.boolean().optional(),
     tags: z.array(z.string()).optional(),
   }),
@@ -28,6 +29,7 @@ const updateCourse = z.object({
     description: z.string().min(20).optional(),
     descriptionType: z.enum(["html"]).optional(),
     price: z.number().int().nonnegative().optional(),
+    thumbnail: z.string().optional(),
     isActive: z.boolean().optional(),
     tags: z.array(z.string()).optional(),
   }),

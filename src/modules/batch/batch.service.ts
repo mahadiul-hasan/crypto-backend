@@ -1,6 +1,11 @@
 import { prisma } from "../../configs/prisma";
 import { BatchStatus } from "../../generated/prisma/enums";
 import { Errors } from "../../utils/errorHelpers";
+import {
+  cacheGetOrSet,
+  cacheInvalidate,
+  makeCacheKey,
+} from "../../utils/cache";
 
 const allowedTransitions: Record<BatchStatus, BatchStatus[]> = {
   UPCOMING: ["ACTIVE"],
@@ -23,44 +28,65 @@ const listBatches = async ({
   status,
   search,
 }: ListBatchesParams) => {
-  const where: any = {};
+  const key = makeCacheKey(
+    "batches:list",
+    `${page}:${pageSize}:${courseId ?? ""}:${status ?? ""}:${search ?? ""}`,
+  );
 
-  if (courseId) where.courseId = courseId;
-  if (status) where.status = status;
-  if (search) {
-    where.name = { contains: search, mode: "insensitive" };
-  }
+  return cacheGetOrSet(key, async () => {
+    const where: any = {};
+    if (courseId) where.courseId = courseId;
+    if (status) where.status = status;
+    if (search) where.name = { contains: search, mode: "insensitive" };
 
-  const [batches, total] = await Promise.all([
-    prisma.batch.findMany({
-      where,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { createdAt: "desc" },
-      include: { course: true },
-    }),
-    prisma.batch.count({ where }),
-  ]);
+    const [batches, total] = await Promise.all([
+      prisma.batch.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { createdAt: "desc" },
+        include: { course: true },
+      }),
+      prisma.batch.count({ where }),
+    ]);
 
-  return { data: batches, total, page, pageSize };
+    return { data: batches, total, page, pageSize };
+  });
 };
 
 const getBatch = async (id: string) => {
-  return prisma.batch.findUnique({
-    where: { id },
-    include: { course: true, classes: true },
-  });
+  const key = makeCacheKey("batch:detail", id);
+
+  return cacheGetOrSet(key, () =>
+    prisma.batch.findUnique({
+      where: { id },
+      include: { course: true, classes: true },
+    }),
+  );
+};
+
+const invalidateBatchCache = async (id: string) => {
+  await cacheInvalidate([
+    `batch:detail:${id}`,
+    `batches:list*`,
+    `batches:public*`,
+    `user:batches*`,
+  ]);
 };
 
 const createBatch = async (data: any) => {
-  return prisma.batch.create({
+  const batch = await prisma.batch.create({
     data,
     include: { course: true },
   });
+
+  await invalidateBatchCache(batch.id);
+
+  return batch;
 };
 
 const updateBatch = async (id: string, data: any) => {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const current = await tx.batch.findUnique({
       where: { id },
       select: { status: true },
@@ -70,7 +96,6 @@ const updateBatch = async (id: string, data: any) => {
 
     if (data.status) {
       const allowed = allowedTransitions[current.status];
-
       if (!allowed.includes(data.status)) {
         throw Errors.BadRequest("Invalid batch status transition");
       }
@@ -82,33 +107,42 @@ const updateBatch = async (id: string, data: any) => {
       include: { course: true },
     });
   });
+
+  await invalidateBatchCache(id);
+
+  return result;
 };
 
 const deleteBatch = async (id: string) => {
   await prisma.batch.delete({ where: { id } });
+  await invalidateBatchCache(id);
 };
 
 const getUserBatches = async (userId: string) => {
-  return prisma.batch.findMany({
-    where: {
-      enrollments: {
-        some: {
-          userId,
+  const key = makeCacheKey("user:batches", userId);
+
+  return cacheGetOrSet(key, () =>
+    prisma.batch.findMany({
+      where: {
+        enrollments: {
+          some: {
+            userId,
+          },
         },
       },
-    },
-    include: {
-      course: true,
-      classes: {
-        orderBy: {
-          date: "asc",
+      include: {
+        course: true,
+        classes: {
+          orderBy: {
+            date: "asc",
+          },
         },
       },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+      orderBy: {
+        createdAt: "desc",
+      },
+    }),
+  );
 };
 
 const listPublicBatches = async ({
@@ -118,26 +152,30 @@ const listPublicBatches = async ({
   status,
   search,
 }: ListBatchesParams) => {
-  const where: any = {};
+  const key = makeCacheKey(
+    "batches:public",
+    `${page}:${pageSize}:${courseId ?? ""}:${status ?? ""}:${search ?? ""}`,
+  );
 
-  if (courseId) where.courseId = courseId;
-  if (status) where.status = status;
-  if (search) {
-    where.name = { contains: search, mode: "insensitive" };
-  }
+  return cacheGetOrSet(key, async () => {
+    const where: any = {};
+    if (courseId) where.courseId = courseId;
+    if (status) where.status = status;
+    if (search) where.name = { contains: search, mode: "insensitive" };
 
-  const [batches, total] = await Promise.all([
-    prisma.batch.findMany({
-      where,
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-      orderBy: { createdAt: "desc" },
-      include: { course: true },
-    }),
-    prisma.batch.count({ where }),
-  ]);
+    const [batches, total] = await Promise.all([
+      prisma.batch.findMany({
+        where,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        orderBy: { createdAt: "desc" },
+        include: { course: true },
+      }),
+      prisma.batch.count({ where }),
+    ]);
 
-  return { data: batches, total, page, pageSize };
+    return { data: batches, total, page, pageSize };
+  });
 };
 
 export const BatchService = {

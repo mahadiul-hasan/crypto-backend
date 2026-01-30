@@ -22,6 +22,7 @@ import {
   invalidateSession,
   listSessions,
 } from "../../services/session.service";
+import { cacheInvalidate } from "../../utils/cache";
 
 const register = async (data: RegisterData): Promise<RegisterResponse> => {
   const isExist = await prisma.user.findUnique({
@@ -120,6 +121,8 @@ const verifyEmail = async (email: string, code: string) => {
       data: { isEmailVerified: true },
     }),
   ]);
+
+  await cacheInvalidate([`users:list*`, `user:detail:${user.id}`]);
 };
 
 const resendVerificationCode = async (email: string) => {
@@ -269,6 +272,7 @@ const resetPassword = async (token: string, newPassword: string) => {
 
   await redisConnection.del(`auth:pwdreset:${token}`);
   await invalidateAllSessions(userId);
+  await cacheInvalidate([`user:detail:${userId}`]);
 };
 
 const changePassword = async (
@@ -313,6 +317,7 @@ const changePassword = async (
   const accessToken = signAccessToken(userId, "USER");
   const refreshToken = generateRefreshToken();
   await saveSession(userId, refreshToken, meta);
+  await cacheInvalidate([`user:detail:${userId}`]);
 
   return {
     message: "Password changed successfully",

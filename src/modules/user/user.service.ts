@@ -1,18 +1,27 @@
 import { prisma } from "../../configs/prisma";
 import { Blockchain } from "../../generated/prisma/enums";
+import {
+  cacheGetOrSet,
+  cacheInvalidate,
+  makeCacheKey,
+} from "../../utils/cache";
 import { assertWalletUpdateAllowed } from "../../utils/walletUpdateLock";
 
 const getProfile = async (userId: string) => {
-  return prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      id: true,
-      email: true,
-      isEmailVerified: true,
-      profile: true,
-      wallets: true,
-    },
-  });
+  const key = makeCacheKey("user:profile", userId);
+
+  return cacheGetOrSet(key, () =>
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        isEmailVerified: true,
+        profile: true,
+        wallets: true,
+      },
+    }),
+  );
 };
 
 const updateProfile = async (
@@ -24,11 +33,15 @@ const updateProfile = async (
     phone?: string;
   },
 ) => {
-  return prisma.profile.upsert({
+  const result = await prisma.profile.upsert({
     where: { userId },
     update: payload,
     create: { userId, ...payload },
   });
+
+  await cacheInvalidate(`user:profile:${userId}`);
+
+  return result;
 };
 
 const updateWallets = async (
@@ -42,7 +55,7 @@ const updateWallets = async (
 ) => {
   await assertWalletUpdateAllowed(userId);
 
-  return prisma.$transaction([
+  const result = await prisma.$transaction([
     prisma.cryptoWallet.deleteMany({ where: { userId } }),
     prisma.cryptoWallet.createMany({
       data: wallets.map((w) => ({
@@ -54,6 +67,10 @@ const updateWallets = async (
       })),
     }),
   ]);
+
+  await cacheInvalidate(`user:profile:${userId}`);
+
+  return result;
 };
 
 export const UserService = {
