@@ -1,0 +1,989 @@
+openapi: 3.0.3
+info:
+  title: Course Management System API
+  version: 1.0.0
+  description: API for managing courses, batches, classes, payments, tags, notifications, users, and admin functions.
+
+servers:
+  - url: http://localhost:5000/api
+    description: Local development server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # Auth Schemas (simplified)
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        name:
+          type: string
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    # Course schemas example (can be expanded)
+    Course:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        descriptionType:
+          type: string
+          enum: [html, markdown]
+        price:
+          type: integer
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+
+    Tag:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    Batch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+          enum: [UPCOMING, ACTIVE, CLOSED]
+        enrollmentOpen:
+          type: string
+          format: date-time
+        enrollmentClose:
+          type: string
+          format: date-time
+        courseId:
+          type: string
+          format: uuid
+        course:
+          $ref: "#/components/schemas/Course"
+
+    Class:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        date:
+          type: string
+          format: date-time
+        batchId:
+          type: string
+          format: uuid
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        batchId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, VERIFIED, REJECTED]
+        amount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [CLASS, SYSTEM, PAYMENT]
+        title:
+          type: string
+        message:
+          type: string
+        read:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+  parameters:
+    PaginationPage:
+      name: page
+      in: query
+      description: Page number (default 1)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PaginationPageSize:
+      name: pageSize
+      in: query
+      description: Number of items per page (default 10)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ==================== AUTH ====================
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Registration successful
+        "400":
+          description: Validation error
+
+  /auth/verify-email:
+    post:
+      summary: Verify user email with code
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                code:
+                  type: string
+      responses:
+        "200":
+          description: Email verified successfully
+
+  /auth/resend-verification-code:
+    post:
+      summary: Resend verification code email
+      tags: [Auth]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Verification code resent
+
+  /auth/login:
+    post:
+      summary: Login user and receive token
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  refreshToken:
+                    type: string
+
+  /auth/request-reset-password:
+    post:
+      summary: Request password reset
+      tags: [Auth]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Password reset requested
+
+  /auth/reset-password:
+    post:
+      summary: Reset password using token
+      tags: [Auth]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Password reset successful
+
+  /auth/refresh-token:
+    post:
+      summary: Refresh JWT access token
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Token refreshed
+
+  /auth/logout:
+    post:
+      summary: Logout current user session
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Logged out
+
+  /auth/logout-all:
+    post:
+      summary: Logout all sessions for user
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Logged out from all sessions
+
+  /auth/change-password:
+    post:
+      summary: Change password for authenticated user
+      tags: [Auth]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [oldPassword, newPassword]
+              properties:
+                oldPassword:
+                  type: string
+                newPassword:
+                  type: string
+      responses:
+        "200":
+          description: Password changed successfully
+
+  # ==================== USER ====================
+  /user/me:
+    get:
+      summary: Get profile of authenticated user
+      tags: [User]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User profile data
+
+  /user/profile:
+    put:
+      summary: Update profile of authenticated user
+      tags: [User]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest" # reuse or create update profile schema
+      responses:
+        "200":
+          description: Profile updated
+
+  /user/wallets:
+    put:
+      summary: Update user wallets
+      tags: [User]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                wallets:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      address:
+                        type: string
+      responses:
+        "200":
+          description: Wallets updated
+
+  # ==================== ADMIN ====================
+  /admin/logs:
+    get:
+      summary: Get admin logs for dashboard
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of logs
+
+  /admin/logs/stats:
+    get:
+      summary: Get log statistics
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Log stats data
+
+  /admin/logs/cleanup:
+    post:
+      summary: Manually cleanup old logs
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Cleanup done
+
+  /admin/logs/download:
+    get:
+      summary: Download logs
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Logs file download
+
+  /admin/users:
+    get:
+      summary: List all users
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of users
+
+  /admin/user/{id}:
+    get:
+      summary: Delete a user by ID
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User deleted
+
+  /admin/analytics:
+    get:
+      summary: Get admin analytics data
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Analytics data
+
+  # ==================== COURSE ====================
+  /course:
+    get:
+      summary: List all courses
+      tags: [Course]
+      parameters:
+        - $ref: "#/components/parameters/PaginationPage"
+        - $ref: "#/components/parameters/PaginationPageSize"
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search courses by title or tag
+        - name: isActive
+          in: query
+          schema:
+            type: boolean
+          description: Filter by active status
+      responses:
+        "200":
+          description: List of courses
+
+    post:
+      summary: Create new course (admin only)
+      tags: [Course]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Course"
+      responses:
+        "201":
+          description: Course created
+
+  /course/{id}:
+    get:
+      summary: Get a specific course by ID
+      tags: [Course]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Course data
+
+    put:
+      summary: Update a course (admin only)
+      tags: [Course]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Course"
+      responses:
+        "200":
+          description: Course updated
+
+    delete:
+      summary: Delete a course (admin only)
+      tags: [Course]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Course deleted
+
+  # ==================== BATCH ====================
+  /batch/public:
+    get:
+      summary: List public batches
+      tags: [Batch]
+      parameters:
+        - $ref: "#/components/parameters/PaginationPage"
+        - $ref: "#/components/parameters/PaginationPageSize"
+      responses:
+        "200":
+          description: List of public batches
+
+  /batch/my:
+    get:
+      summary: Get batches for authenticated user
+      tags: [Batch]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User batches list
+
+  /batch:
+    get:
+      summary: List batches (admin only)
+      tags: [Batch]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaginationPage"
+        - $ref: "#/components/parameters/PaginationPageSize"
+        - name: courseId
+          in: query
+          schema:
+            type: string
+          description: Filter by course ID
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [UPCOMING, ACTIVE, CLOSED]
+          description: Filter by batch status
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Search batches by name
+      responses:
+        "200":
+          description: List of batches
+
+    post:
+      summary: Create a batch (admin only)
+      tags: [Batch]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Batch"
+      responses:
+        "201":
+          description: Batch created
+
+  /batch/{id}:
+    get:
+      summary: Get batch details by ID
+      tags: [Batch]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Batch details
+
+    put:
+      summary: Update a batch (admin only)
+      tags: [Batch]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Batch"
+      responses:
+        "200":
+          description: Batch updated
+
+    delete:
+      summary: Delete a batch (admin only)
+      tags: [Batch]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Batch deleted
+
+  # ==================== CLASS ====================
+  /class/my:
+    get:
+      summary: Get classes for authenticated user
+      tags: [Class]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of user's classes
+
+  /class:
+    get:
+      summary: List classes (admin only)
+      tags: [Class]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaginationPage"
+        - $ref: "#/components/parameters/PaginationPageSize"
+      responses:
+        "200":
+          description: List of classes
+
+    post:
+      summary: Create class (admin only)
+      tags: [Class]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Class"
+      responses:
+        "201":
+          description: Class created
+
+  /class/{id}:
+    get:
+      summary: Get class by ID (admin only)
+      tags: [Class]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Class details
+
+    put:
+      summary: Update class by ID (admin only)
+      tags: [Class]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Class"
+      responses:
+        "200":
+          description: Class updated
+
+    delete:
+      summary: Delete class by ID (admin only)
+      tags: [Class]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Class deleted
+
+  # ==================== PAYMENT ====================
+  /payment:
+    post:
+      summary: Submit a payment (authenticated user)
+      tags: [Payment]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                batchId:
+                  type: string
+                  format: uuid
+                amount:
+                  type: integer
+      responses:
+        "201":
+          description: Payment submitted
+
+  /payment/my:
+    get:
+      summary: Get payments of authenticated user
+      tags: [Payment]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of payments
+
+  /payment/payments:
+    get:
+      summary: List pending payments (admin only)
+      tags: [Payment]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of pending payments
+
+  /payment/payments/{id}/verify:
+    put:
+      summary: Verify payment (admin only)
+      tags: [Payment]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payment verified
+
+  /payment/payments/{id}/reject:
+    put:
+      summary: Reject payment (admin only)
+      tags: [Payment]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Payment rejected
+
+  # ==================== TAG ====================
+  /tag:
+    get:
+      summary: List all tags (admin only)
+      tags: [Tag]
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/PaginationPage"
+        - $ref: "#/components/parameters/PaginationPageSize"
+      responses:
+        "200":
+          description: List of tags
+
+    post:
+      summary: Create a tag (admin only)
+      tags: [Tag]
+      security:
+        - BearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Tag created
+
+  /tag/course/{courseId}:
+    get:
+      summary: List tags for a course (admin only)
+      tags: [Tag]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tags for course
+
+    post:
+      summary: Attach tags to a course (admin only)
+      tags: [Tag]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tagIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Tags attached
+
+    delete:
+      summary: Detach tags from a course (admin only)
+      tags: [Tag]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: courseId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tagIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Tags detached
+
+  # ==================== NOTIFICATION ====================
+  /notification:
+    get:
+      summary: List notifications (admin only)
+      tags: [Notification]
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: List of notifications
+
+  /notification/{id}/read:
+    patch:
+      summary: Mark notification as read (admin only)
+      tags: [Notification]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Notification marked as read
+
+  /notification/{id}:
+    delete:
+      summary: Delete notification (admin only)
+      tags: [Notification]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Notification deleted

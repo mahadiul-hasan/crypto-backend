@@ -1,0 +1,17 @@
+export const env = {
+  NODE_ENV: process.env.NODE_ENV,
+  PORT: process.env.PORT ? parseInt(process.env.PORT) : 3000,
+  ADMIN_EMAIL: process.env.ADMIN_EMAIL,
+  SMTP_USER: process.env.SMTP_USER,
+  SMTP_PASS: process.env.SMTP_PASS,
+  REDIS_HOST: process.env.REDIS_HOST,
+  REDIS_PORT: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
+  REDIS_PASSWORD: process.env.REDIS_PASSWORD,
+  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET as string,
+  FRONTEND_URL: process.env.FRONTEND_URL,
+  RATE_LIMIT_WINDOW_MS: process.env.RATE_LIMIT_WINDOW_MS,
+  RATE_LIMIT_MAX_REQUESTS: process.env.RATE_LIMIT_MAX_REQUESTS,
+  AUTH_RATE_LIMIT_MAX_REQUESTS: process.env.AUTH_RATE_LIMIT_MAX_REQUESTS,
+  LOG_LEVEL: process.env.LOG_LEVEL,
+  LOG_RETENTION_DAYS: process.env.LOG_RETENTION_DAYS,
+};
