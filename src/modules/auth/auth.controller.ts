@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { AuthService } from "./auth.service";
+import { Errors } from "../../utils/errorHelpers";
 
 const register = async (req: Request, res: Response) => {
   await AuthService.register(req.body);
@@ -17,15 +18,58 @@ const resendVerificationCode = async (req: Request, res: Response) => {
 };
 
 const login = async (req: Request, res: Response) => {
-  const tokens = await AuthService.login(req.body.email, req.body.password);
-  res.json(tokens);
+  const deviceId = req.headers["x-device-id"] as string;
+
+  if (!deviceId) {
+    throw Errors.BadRequest("Missing device id");
+  }
+
+  const tokens = await AuthService.login(req.body.email, req.body.password, {
+    ip: req.ip || "",
+    ua: req.headers["user-agent"] || "",
+    deviceId,
+  });
+
+  // Cookie refresh
+  res.cookie("refresh", tokens.refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/auth/refresh",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+
+  res.json({ accessToken: tokens.accessToken });
 };
 
 const refreshToken = async (req: Request, res: Response) => {
-  const { refreshToken } = req.body;
+  const refresh = req.cookies.refresh;
 
-  const tokens = await AuthService.refreshToken(refreshToken);
-  res.json(tokens);
+  if (!refresh) {
+    throw Errors.Unauthorized("No refresh token");
+  }
+
+  const deviceId = req.headers["x-device-id"] as string;
+
+  if (!deviceId) {
+    throw Errors.BadRequest("Missing device id");
+  }
+
+  const tokens = await AuthService.refreshToken(refresh, {
+    ip: req.ip || "",
+    ua: req.headers["user-agent"] || "",
+    deviceId,
+  });
+
+  res.cookie("refresh", tokens.refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    path: "/auth/refresh",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+
+  res.json({ accessToken: tokens.accessToken });
 };
 
 const logout = async (req: Request, res: Response) => {
@@ -33,13 +77,6 @@ const logout = async (req: Request, res: Response) => {
 
   const result = await AuthService.logout(refreshToken);
   res.json(result);
-};
-
-const logoutAll = async (req: Request, res: Response) => {
-  const userId = req.user!.id;
-
-  await AuthService.logoutAll(userId);
-  res.json({ message: "Logged out from all sessions" });
 };
 
 const requestPasswordReset = async (req: Request, res: Response) => {
@@ -60,13 +97,46 @@ const changePassword = async (req: Request, res: Response) => {
   const userId = req.user!.id;
   const { currentPassword, newPassword } = req.body;
 
+  const deviceId = req.headers["x-device-id"] as string;
+
+  if (!deviceId) {
+    throw Errors.BadRequest("Missing device id");
+  }
+
   const result = await AuthService.changePassword(
     userId,
     currentPassword,
     newPassword,
+    {
+      ip: req.ip || "",
+      ua: req.headers["user-agent"] || "",
+      deviceId,
+    },
   );
 
   res.json(result);
+};
+
+const getSessions = async (req: Request, res: Response) => {
+  const sessions = await AuthService.getSessions(req.user!.sub);
+
+  res.json(sessions);
+};
+
+const logoutOthersCtrl = async (req: Request, res: Response) => {
+  const deviceId = req.headers["x-device-id"] as string;
+
+  await AuthService.logoutOthers(req.user!.sub, deviceId);
+
+  res.json({ message: "Other sessions removed" });
+};
+
+const logoutAll = async (req: Request, res: Response) => {
+  await AuthService.logoutAll(req.user!.sub);
+
+  res.clearCookie("refresh");
+
+  res.json({ message: "Logged out everywhere" });
 };
 
 export const AuthController = {
@@ -80,4 +150,6 @@ export const AuthController = {
   requestPasswordReset,
   resetPassword,
   changePassword,
+  getSessions,
+  logoutOthersCtrl,
 };

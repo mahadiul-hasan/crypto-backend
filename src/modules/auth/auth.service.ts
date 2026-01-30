@@ -10,15 +10,18 @@ import {
 import { authEventEmitter } from "./auth.events";
 import { checkEmailRateLimit } from "../../utils/emailRateLimit";
 import { AppError } from "../../utils/AppError";
-import {
-  invalidateAllSessions,
-  invalidateSession,
-  saveSession,
-} from "../../services/session.service";
 import { redisConnection } from "../../configs/redis";
 import { Errors } from "../../utils/errorHelpers";
 import { env } from "../../configs/env";
 import bcrypt from "bcryptjs";
+import { hashRefreshToken } from "../../utils/tokenHash";
+import {
+  logoutOthers as sessionLogoutOthers,
+  invalidateAllSessions,
+  saveSession,
+  invalidateSession,
+  listSessions,
+} from "../../services/session.service";
 
 const register = async (data: RegisterData): Promise<RegisterResponse> => {
   const isExist = await prisma.user.findUnique({
@@ -158,7 +161,15 @@ const resendVerificationCode = async (email: string) => {
   return { message: "Verification code sent" };
 };
 
-const login = async (email: string, password: string) => {
+const login = async (
+  email: string,
+  password: string,
+  meta: {
+    ip: string;
+    ua: string;
+    deviceId: string;
+  },
+) => {
   const user = await prisma.user.findUnique({
     where: { email },
     include: { roles: true },
@@ -179,25 +190,41 @@ const login = async (email: string, password: string) => {
 
   const refreshToken = generateRefreshToken();
 
-  await saveSession(user.id, refreshToken);
+  await saveSession(user.id, refreshToken, meta);
 
   return { accessToken, refreshToken };
 };
 
-const refreshToken = async (refreshToken: string) => {
-  const userId = await redisConnection.get(`auth:refresh:${refreshToken}`);
-  if (!userId) throw Errors.Unauthorized("Invalid refresh token");
+const refreshToken = async (
+  token: string,
+  meta: {
+    ip: string;
+    ua: string;
+    deviceId: string;
+  },
+) => {
+  const hashed = hashRefreshToken(token);
 
-  await invalidateSession(refreshToken);
+  const userId = await redisConnection.get(`auth:refresh:${hashed}`);
+
+  // REUSE DETECTED
+  if (!userId) {
+    // Possible theft
+    throw Errors.Unauthorized("Session compromised");
+  }
+
+  await invalidateSession(token);
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { roles: true },
   });
+
   if (!user) throw Errors.BadRequest("User not found");
 
   const newRefresh = generateRefreshToken();
-  await saveSession(user.id, newRefresh);
+
+  await saveSession(user.id, newRefresh, meta);
 
   return {
     accessToken: signAccessToken(user.id, user.roles[0]?.role ?? "USER"),
@@ -208,10 +235,6 @@ const refreshToken = async (refreshToken: string) => {
 const logout = async (refreshToken: string) => {
   await invalidateSession(refreshToken);
   return { message: "Logged out" };
-};
-
-const logoutAll = async (userId: string) => {
-  await invalidateAllSessions(userId);
 };
 
 const requestPasswordReset = async (email: string) => {
@@ -252,6 +275,11 @@ const changePassword = async (
   userId: string,
   currentPassword: string,
   newPassword: string,
+  meta: {
+    ip: string;
+    ua: string;
+    deviceId: string;
+  },
 ) => {
   if (currentPassword === newPassword) {
     throw Errors.BadRequest("New password must be different");
@@ -284,13 +312,25 @@ const changePassword = async (
   // Issue new tokens
   const accessToken = signAccessToken(userId, "USER");
   const refreshToken = generateRefreshToken();
-  await saveSession(userId, refreshToken);
+  await saveSession(userId, refreshToken, meta);
 
   return {
     message: "Password changed successfully",
     accessToken,
     refreshToken,
   };
+};
+
+const getSessions = async (userId: string) => {
+  return await listSessions(userId);
+};
+
+const logoutOthers = async (userId: string, deviceId: string) => {
+  await sessionLogoutOthers(userId, deviceId);
+};
+
+const logoutAll = async (userId: string) => {
+  await invalidateAllSessions(userId);
 };
 
 export const AuthService = {
@@ -300,8 +340,10 @@ export const AuthService = {
   login,
   refreshToken,
   logout,
-  logoutAll,
   requestPasswordReset,
   resetPassword,
   changePassword,
+  getSessions,
+  logoutOthers,
+  logoutAll,
 };

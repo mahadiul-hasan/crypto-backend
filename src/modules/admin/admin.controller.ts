@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { LogManager, LogEntry } from "../../utils/logManager";
 import { Errors } from "../../utils/errorHelpers";
 import { AdminService } from "./admin.service";
+import { invalidateAllSessions } from "../../services/session.service";
 
 // Get logs with filtering and pagination
 const getLogs = async (req: Request, res: Response) => {
@@ -187,6 +188,13 @@ const getAnalytics = async (req: Request, res: Response) => {
   res.json(data);
 };
 
+export const forceLogoutUser = async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  await AdminService.forceLogoutUser(id);
+
+  res.json({ message: "User disconnected" });
+};
+
 // Export all functions as controller object
 export const AdminController = {
   getLogs,
@@ -196,4 +204,5 @@ export const AdminController = {
   listUsers,
   deleteUser,
   getAnalytics,
+  forceLogoutUser,
 };

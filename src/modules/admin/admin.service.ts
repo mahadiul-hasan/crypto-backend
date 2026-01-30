@@ -1,4 +1,5 @@
 import { prisma } from "../../configs/prisma";
+import { invalidateAllSessions } from "../../services/session.service";
 
 type ListUsersParams = {
   page: number;
@@ -64,8 +65,13 @@ const getAdminAnalytics = async () => {
   };
 };
 
+const forceLogoutUser = async (userId: string) => {
+  await invalidateAllSessions(userId);
+};
+
 export const AdminService = {
   listUsers,
   deleteUser,
   getAdminAnalytics,
+  forceLogoutUser,
 };

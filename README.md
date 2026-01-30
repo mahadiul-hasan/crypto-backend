@@ -194,7 +194,7 @@ npm run start
 ##### All protected route require:
 
 ```
-Authorization: <access_token>
+Authorization: "Bearer <access_token>"
 ```
 
 ### 📡 API Base URL

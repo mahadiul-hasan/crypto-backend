@@ -8,6 +8,7 @@ import { createRateLimiter } from "./middleware/security";
 import logger from "./utils/logger";
 import { LogManager } from "./utils/logManager";
 import router from "./modules/route";
+import csurf from "csurf";
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // Security middlewares
 app.use(securityMiddleware);
+app.use(csurf({ cookie: true }));
 
 // Rate limiting for all routes (general)
 app.use(

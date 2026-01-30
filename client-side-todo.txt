@@ -1,0 +1,22 @@
+✅ STEP 1 — Client: Stable Device ID
+Frontend (run once on app start)
+// device.js
+export function getDeviceId() {
+  let id = localStorage.getItem("device_id");
+
+
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("device_id", id);
+  }
+
+
+  return id;
+}
+
+Attach to requests:
+
+axios.interceptors.request.use((config) => {
+  config.headers["X-Device-Id"] = getDeviceId();
+  return config;
+});

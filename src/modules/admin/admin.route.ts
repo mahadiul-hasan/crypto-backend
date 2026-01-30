@@ -27,4 +27,6 @@ router.get("/user/:id", AdminController.deleteUser);
 
 router.get("/analytics", AdminController.getAnalytics);
 
+router.post("/users/:id/logout", AdminController.forceLogoutUser);
+
 export const AdminRoutes = router;

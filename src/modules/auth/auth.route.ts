@@ -32,9 +32,13 @@ router.post("/reset-password", AuthController.resetPassword);
 
 router.use(authenticate);
 
+router.get("/sessions", AuthController.getSessions);
+
 router.post("/refresh-token", AuthController.refreshToken);
 
 router.post("/logout", AuthController.logout);
+
+router.post("/logout-others", AuthController.logoutOthersCtrl);
 
 router.post("/logout-all", AuthController.logoutAll);
 
